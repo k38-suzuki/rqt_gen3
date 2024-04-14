@@ -76,6 +76,7 @@ private:
     void on_timer_timeout();
 
     QDoubleSpinBox* velSpins[NumJoints];
+    QTimer* timer;
 
     ros::NodeHandle n;
     ros::Publisher joint_pub;
@@ -95,6 +96,7 @@ private:
     void on_timer_timeout();
 
     QDoubleSpinBox* twistSpins[2];
+    QTimer* timer;
 
     ros::NodeHandle n;
     ros::Publisher twist_pub;
@@ -221,8 +223,7 @@ JointWidget::JointWidget(QWidget* parent)
     connect(button, &QToolButton::toggled,
         [&](bool checked){ on_toolButton_toggled(checked); });
 
-    auto timer = new QTimer(this);
-    timer->start(1000.0 / 40.0);
+    timer = new QTimer(this);
     connect(timer, &QTimer::timeout, [&](){ on_timer_timeout(); });
 
     auto layout2 = new QHBoxLayout;
@@ -251,23 +252,23 @@ void JointWidget::on_toolButton_toggled(bool checked)
 {
     if(checked) {
         joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("in/joint_velocity", 1);
+        timer->start(1000.0 / 40.0);
     } else {
+        timer->stop();
         joint_pub.shutdown();
     }
 }
 
 void JointWidget::on_timer_timeout()
 {
-    if(joint_pub) {
-        kortex_driver::Base_JointSpeeds joint_msg;
-        joint_msg.joint_speeds.resize(6);
-        for(int i = 0; i < joint_msg.joint_speeds.size(); ++i) {
-            joint_msg.joint_speeds[i].joint_identifier = i;
-            joint_msg.joint_speeds[i].value = joint_vel[i];
-            joint_msg.joint_speeds[i].duration = 0;
-        }
-        joint_pub.publish(joint_msg);
+    kortex_driver::Base_JointSpeeds joint_msg;
+    joint_msg.joint_speeds.resize(6);
+    for(int i = 0; i < joint_msg.joint_speeds.size(); ++i) {
+        joint_msg.joint_speeds[i].joint_identifier = i;
+        joint_msg.joint_speeds[i].value = joint_vel[i];
+        joint_msg.joint_speeds[i].duration = 0;
     }
+    joint_pub.publish(joint_msg);
 }
 
 TwistWidget::TwistWidget(QWidget* parent)
@@ -298,8 +299,7 @@ TwistWidget::TwistWidget(QWidget* parent)
     connect(button, &QToolButton::toggled,
         [&](bool checked){ on_toolButton_toggled(checked); });
 
-    auto timer = new QTimer(this);
-    timer->start(1000.0 / 40.0);
+    timer = new QTimer(this);
     connect(timer, &QTimer::timeout, [&](){ on_timer_timeout(); });
 
     auto layout2 = new QHBoxLayout;
@@ -322,7 +322,9 @@ void TwistWidget::on_toolButton_toggled(bool checked)
 {
     if(checked) {
         twist_pub = n.advertise<kortex_driver::TwistCommand>("in/cartesian_velocity", 1);
+        timer->start(1000.0 / 40.0);
     } else {
+        timer->stop();
         twist_pub.shutdown();
     }
 }
@@ -353,25 +355,23 @@ void TwistWidget::on_timer_timeout()
         twist_angular[2] = angular_vel * joy.axes[6];
     }
 
-    if(twist_pub) {
-        kortex_driver::TwistCommand twist_msg;
-        if(current_map == 0) {
-            twist_msg.twist.linear_x = twist_linear[0];
-            twist_msg.twist.linear_y = twist_linear[1];
-            twist_msg.twist.linear_z = twist_linear[2];
-            twist_msg.twist.angular_x = 0.0;
-            twist_msg.twist.angular_y = 0.0;
-            twist_msg.twist.angular_z = 0.0;
-        } else if(current_map == 1) {
-            twist_msg.twist.linear_x = 0.0;
-            twist_msg.twist.linear_y = 0.0;
-            twist_msg.twist.linear_z = 0.0;
-            twist_msg.twist.angular_x = twist_angular[0];
-            twist_msg.twist.angular_y = twist_angular[1];
-            twist_msg.twist.angular_z = twist_angular[2];
-        }
-        twist_pub.publish(twist_msg);
+    kortex_driver::TwistCommand twist_msg;
+    if(current_map == 0) {
+        twist_msg.twist.linear_x = twist_linear[0];
+        twist_msg.twist.linear_y = twist_linear[1];
+        twist_msg.twist.linear_z = twist_linear[2];
+        twist_msg.twist.angular_x = 0.0;
+        twist_msg.twist.angular_y = 0.0;
+        twist_msg.twist.angular_z = 0.0;
+    } else if(current_map == 1) {
+        twist_msg.twist.linear_x = 0.0;
+        twist_msg.twist.linear_y = 0.0;
+        twist_msg.twist.linear_z = 0.0;
+        twist_msg.twist.angular_x = twist_angular[0];
+        twist_msg.twist.angular_y = twist_angular[1];
+        twist_msg.twist.angular_z = twist_angular[2];
     }
+    twist_pub.publish(twist_msg);
 }
 
 HomeWidget::HomeWidget(QWidget* parent)
