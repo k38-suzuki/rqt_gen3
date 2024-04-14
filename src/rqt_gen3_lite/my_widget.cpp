@@ -539,20 +539,20 @@ ActionWidget::ActionWidget(QWidget* parent)
 
 void ActionWidget::clear()
 {
-    std_msgs::Empty dummy;
-    clear_faults_pub.publish(dummy);
+    std_msgs::Empty emp_msg;
+    clear_faults_pub.publish(emp_msg);
 }
 
 void ActionWidget::stop()
 {
-    std_msgs::Empty dummy;
-    stop_pub.publish(dummy);
+    std_msgs::Empty emp_msg;
+    stop_pub.publish(emp_msg);
 }
 
 void ActionWidget::estop()
 {
-    std_msgs::Empty dummy;
-    emergency_stop_pub.publish(dummy);
+    std_msgs::Empty emp_msg;
+    emergency_stop_pub.publish(emp_msg);
 }
 
 }
