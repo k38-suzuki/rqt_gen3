@@ -119,6 +119,8 @@ private:
     bool home();
     bool grip(double value);
 
+    void on_toolButton_toggled(bool checked);
+
     ros::NodeHandle n;
     ros::Subscriber action_sub;
     ros::ServiceClient service_client_activate_notif;
@@ -136,6 +138,12 @@ private:
     void clear();
     void stop();
     void estop();
+
+    void on_toolButton_toggled(bool checked);
+
+    QToolButton* clearButton;
+    QToolButton* stopButton;
+    QToolButton* estopButton;
 
     ros::NodeHandle n;
     ros::Publisher clear_faults_pub;
@@ -275,8 +283,6 @@ TwistWidget::TwistWidget(QWidget* parent)
     : QWidget(parent)
     , current_map(0)
 {
-    joy_sub = n.subscribe("joy", 1, &TwistWidget::joyCallback, this);
-
     twist_linear[0] = twist_linear[1] = twist_linear[2] = 0.0;
     twist_angular[0] = twist_angular[1] = twist_angular[2] = 0.0;
     prev_button_state[0] = prev_button_state[1] = false;
@@ -322,10 +328,12 @@ void TwistWidget::on_toolButton_toggled(bool checked)
 {
     if(checked) {
         twist_pub = n.advertise<kortex_driver::TwistCommand>("in/cartesian_velocity", 1);
+        joy_sub = n.subscribe("joy", 1, &TwistWidget::joyCallback, this);
         timer->start(1000.0 / 40.0);
     } else {
         timer->stop();
         twist_pub.shutdown();
+        joy_sub.shutdown();
     }
 }
 
@@ -399,9 +407,6 @@ HomeWidget::HomeWidget(QWidget* parent)
         ROS_INFO("%s", error_string.c_str());
     }
 
-    // Subscribe to the Action Topic
-    action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
-
     // We need to call this service to activate the Action Notification on the kortex_driver node.
     service_client_activate_notif = n.serviceClient<kortex_driver::OnNotificationActionTopic>("/" + robot_name + "/base/activate_publishing_of_action_topic");
     kortex_driver::OnNotificationActionTopic service_activate_notif;
@@ -413,20 +418,27 @@ HomeWidget::HomeWidget(QWidget* parent)
         is_successed = false;
     }
 
-    auto button1 = new QToolButton;
-    button1->setText("Clear");
-    connect(button1, &QToolButton::clicked, [&](){ clear(); });
+    auto button = new QToolButton;
+    button->setIcon(QIcon::fromTheme("network-wireless"));
+    button->setCheckable(true);
+    connect(button, &QToolButton::toggled,
+        [&](bool checked){ on_toolButton_toggled(checked); });
+
     auto button2 = new QToolButton;
-    button2->setText("Home");
-    connect(button2, &QToolButton::clicked, [&](){ home(); });
+    button2->setText("Clear");
+    connect(button2, &QToolButton::clicked, [&](){ clear(); });
+    auto button3 = new QToolButton;
+    button3->setText("Home");
+    connect(button3, &QToolButton::clicked, [&](){ home(); });
 
     if(is_gripper_present) {
 
     }
 
     auto layout2 = new QHBoxLayout;
-    // layout2->addWidget(button1);
-    layout2->addWidget(button2);
+    layout2->addWidget(button);
+    // layout2->addWidget(button2);
+    layout2->addWidget(button3);
     layout2->addStretch();
 
     auto layout = new QVBoxLayout;
@@ -508,27 +520,43 @@ bool HomeWidget::grip(double value)
     return true;
 }
 
+void HomeWidget::on_toolButton_toggled(bool checked)
+{
+    if(checked) {
+        // Subscribe to the Action Topic
+        action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
+    } else {
+        action_sub.shutdown();
+    }
+}
+
 ActionWidget::ActionWidget(QWidget* parent)
     : QWidget(parent)
 {
-    clear_faults_pub = n.advertise<std_msgs::Empty>("in/clear_faults", 1);
-    stop_pub = n.advertise<std_msgs::Empty>("in/stop", 1);
-    emergency_stop_pub = n.advertise<std_msgs::Empty>("in/emergency_stop", 1);
+    auto button = new QToolButton;
+    button->setIcon(QIcon::fromTheme("network-wireless"));
+    button->setCheckable(true);
+    connect(button, &QToolButton::toggled,
+        [&](bool checked){ on_toolButton_toggled(checked); });
 
-    auto button1 = new QToolButton;
-    button1->setText("Clear");
-    connect(button1, &QToolButton::clicked, [&](){ clear(); });
-    auto button2 = new QToolButton;
-    button2->setText("Stop");
-    connect(button2, &QToolButton::clicked, [&](){ stop(); });
-    auto button3 = new QToolButton;
-    button3->setText("E-Stop");
-    connect(button3, &QToolButton::clicked, [&](){ estop(); });
+    clearButton = new QToolButton;
+    clearButton->setText("Clear");
+    clearButton->setEnabled(false);
+    connect(clearButton, &QToolButton::clicked, [&](){ clear(); });
+    stopButton = new QToolButton;
+    stopButton->setText("Stop");
+    stopButton->setEnabled(false);
+    connect(stopButton, &QToolButton::clicked, [&](){ stop(); });
+    estopButton = new QToolButton;
+    estopButton->setText("E-Stop");
+    estopButton->setEnabled(false);
+    connect(estopButton, &QToolButton::clicked, [&](){ estop(); });
 
     auto layout2 = new QHBoxLayout;
-    layout2->addWidget(button1);
-    layout2->addWidget(button2);
-    layout2->addWidget(button3);
+    layout2->addWidget(button);
+    layout2->addWidget(clearButton);
+    layout2->addWidget(stopButton);
+    layout2->addWidget(estopButton);
     layout2->addStretch();
 
     auto layout = new QVBoxLayout;
@@ -553,6 +581,23 @@ void ActionWidget::estop()
 {
     std_msgs::Empty emp_msg;
     emergency_stop_pub.publish(emp_msg);
+}
+
+void ActionWidget::on_toolButton_toggled(bool checked)
+{
+    clearButton->setEnabled(checked);
+    stopButton->setEnabled(checked);
+    estopButton->setEnabled(checked);
+
+    if(checked) {
+        clear_faults_pub = n.advertise<std_msgs::Empty>("in/clear_faults", 1);
+        stop_pub = n.advertise<std_msgs::Empty>("in/stop", 1);
+        emergency_stop_pub = n.advertise<std_msgs::Empty>("in/emergency_stop", 1);
+    } else {
+        clear_faults_pub.shutdown();
+        stop_pub.shutdown();
+        emergency_stop_pub.shutdown();
+    }
 }
 
 }
