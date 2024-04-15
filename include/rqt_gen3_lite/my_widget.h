@@ -11,6 +11,7 @@ namespace rqt_gen3_lite {
 
 class MyWidget : public QWidget
 {
+    Q_OBJECT
 public:
     MyWidget(QWidget* parent = nullptr);
 
