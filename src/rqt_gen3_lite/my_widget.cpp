@@ -259,7 +259,7 @@ void JointWidget::on_toolButton_released(int arg1)
 void JointWidget::on_toolButton_toggled(bool checked)
 {
     if(checked) {
-        joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("in/joint_velocity", 1);
+        joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("my_gen3_lite/in/joint_velocity", 1);
         timer->start(1000.0 / 40.0);
     } else {
         timer->stop();
@@ -327,7 +327,7 @@ void TwistWidget::joyCallback(const sensor_msgs::Joy& msg)
 void TwistWidget::on_toolButton_toggled(bool checked)
 {
     if(checked) {
-        twist_pub = n.advertise<kortex_driver::TwistCommand>("in/cartesian_velocity", 1);
+        twist_pub = n.advertise<kortex_driver::TwistCommand>("my_gen3_lite/in/cartesian_velocity", 1);
         joy_sub = n.subscribe("joy", 1, &TwistWidget::joyCallback, this);
         timer->start(1000.0 / 40.0);
     } else {
@@ -590,9 +590,9 @@ void ActionWidget::on_toolButton_toggled(bool checked)
     estopButton->setEnabled(checked);
 
     if(checked) {
-        clear_faults_pub = n.advertise<std_msgs::Empty>("in/clear_faults", 1);
-        stop_pub = n.advertise<std_msgs::Empty>("in/stop", 1);
-        emergency_stop_pub = n.advertise<std_msgs::Empty>("in/emergency_stop", 1);
+        clear_faults_pub = n.advertise<std_msgs::Empty>("my_gen3_lite/in/clear_faults", 1);
+        stop_pub = n.advertise<std_msgs::Empty>("my_gen3_lite/in/stop", 1);
+        emergency_stop_pub = n.advertise<std_msgs::Empty>("my_gen3_lite/in/emergency_stop", 1);
     } else {
         clear_faults_pub.shutdown();
         stop_pub.shutdown();

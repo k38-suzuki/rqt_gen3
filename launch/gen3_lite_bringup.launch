@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<launch>
+  <include file="$(find kortex_driver)/launch/kortex_driver.launch">
+    <arg name="arm" value="gen3_lite"/>
+    <arg name="start_rviz" value="false"/>
+  </include>
+  
+  <node pkg="rqt_gui" name="rqt_gui" type="rqt_gui"/>
+</launch>
