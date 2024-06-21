@@ -121,6 +121,9 @@ private:
 
     void on_toolButton_toggled(bool checked);
 
+    QToolButton* clearButton;
+    QToolButton* homeButton;
+
     ros::NodeHandle n;
     ros::Subscriber action_sub;
     ros::ServiceClient service_client_activate_notif;
@@ -424,12 +427,14 @@ HomeWidget::HomeWidget(QWidget* parent)
     connect(button, &QToolButton::toggled,
         [&](bool checked){ on_toolButton_toggled(checked); });
 
-    auto button2 = new QToolButton;
-    button2->setText("Clear");
-    connect(button2, &QToolButton::clicked, [&](){ clear(); });
-    auto button3 = new QToolButton;
-    button3->setText("Home");
-    connect(button3, &QToolButton::clicked, [&](){ home(); });
+    clearButton = new QToolButton;
+    clearButton->setText("Clear");
+    clearButton->setEnabled(false);
+    connect(clearButton, &QToolButton::clicked, [&](){ clear(); });
+    homeButton = new QToolButton;
+    homeButton->setText("Home");
+    homeButton->setEnabled(false);
+    connect(homeButton, &QToolButton::clicked, [&](){ home(); });
 
     if(is_gripper_present) {
 
@@ -437,8 +442,8 @@ HomeWidget::HomeWidget(QWidget* parent)
 
     auto layout2 = new QHBoxLayout;
     layout2->addWidget(button);
-    // layout2->addWidget(button2);
-    layout2->addWidget(button3);
+    // layout2->addWidget(clearButton);
+    layout2->addWidget(homeButton);
     layout2->addStretch();
 
     auto layout = new QVBoxLayout;
@@ -522,6 +527,9 @@ bool HomeWidget::grip(double value)
 
 void HomeWidget::on_toolButton_toggled(bool checked)
 {
+    clearButton->setEnabled(checked);
+    homeButton->setEnabled(checked);
+
     if(checked) {
         // Subscribe to the Action Topic
         action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
