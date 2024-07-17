@@ -63,45 +63,25 @@ bool wait_for_action_end_or_abort()
 
 namespace rqt_gen3 {
 
-class HomeWidget : public QWidget
-{
-public:
-    HomeWidget(QWidget* parent = nullptr);
-
-private:
-    bool clear();
-    bool home();
-    bool grip(double value);
-
-    void on_toolButton_toggled(bool checked);
-
-    QToolButton* clearButton;
-    QToolButton* homeButton;
-
-    ros::NodeHandle n;
-    ros::Subscriber action_sub;
-    ros::ServiceClient service_client_activate_notif;
-
-    std::string robot_name;
-    bool is_successed;
-};
-
 class MyWidget::Impl
 {
 public:
     MyWidget* self;
 
     Impl(MyWidget* self);
-    ~Impl();
 
     enum Mode { JointMode, TwistMode };
-    enum { NumJoints = 6 };
+    enum { NumJoints = 7 };
 
     void joyCallback(const sensor_msgs::Joy& msg);
 
     void clear();
     void stop();
     void estop();
+    // example actions
+    bool clear2();
+    bool home();
+    bool grip(double value);
 
     void on_robotCombo_currentIndexChanged(int index);
     void on_toolButton_pressed(int arg1, int arg2);
@@ -112,6 +92,7 @@ public:
 
     QComboBox* robotCombo;
     QToolButton* playButton;
+    QToolButton* homeButton;
     QToolButton* clearButton;
     QToolButton* stopButton;
     QToolButton* estopButton;
@@ -127,14 +108,21 @@ public:
     ros::Publisher joint_pub;
     ros::Publisher twist_pub;
     ros::Subscriber joy_sub;
+    ros::Subscriber action_sub;
+    ros::ServiceClient service_client_activate_notif;
+
     sensor_msgs::Joy latestJoyState;
 
+    std::string arm;
+    std::string robot_name;
+
+    int degree_of_freedom;
     int current_map;
-    double joint_vel[6];
+    double joint_vel[NumJoints];
     double twist_linear[3];
     double twist_angular[3];
     bool prev_button_state[2];
-    std::string arm;
+    bool is_successed;
 
     Mode currentMode;
 };
@@ -147,14 +135,51 @@ MyWidget::MyWidget(QWidget* parent)
 
 MyWidget::Impl::Impl(MyWidget* self)
     : self(self)
-    , currentMode(JointMode)
+    , degree_of_freedom(NumJoints)
     , current_map(0)
     , arm("gen3")
+    , robot_name("my_gen3")
+    , is_successed(true)
+    , currentMode(JointMode)
 {
     self->setWindowTitle("Gen3/Gen3 lite");
 
+    // initialize actions
+    {
+        bool is_gripper_present = false;
+
+        // Parameter robot_name
+        if(!ros::param::get("~robot_name", robot_name)) {
+            std::string error_string = "Parameter robot_name was not specified, defaulting to " + robot_name + " as namespace";
+            ROS_WARN("%s", error_string.c_str());
+        } else {
+            std::string error_string = "Using robot_name " + robot_name + " as namespace";
+            ROS_INFO("%s", error_string.c_str());
+        }
+
+        // Parameter is_gripper_present
+        if(!ros::param::get("/" + robot_name + "/is_gripper_present", is_gripper_present)) {
+            std::string error_string = "Parameter /" + robot_name + "/is_gripper_present was not specified, defaulting to " + std::to_string(is_gripper_present);
+            ROS_WARN("%s", error_string.c_str());
+        } else {
+            std::string error_string = "Using is_gripper_present " + std::to_string(is_gripper_present);
+            ROS_INFO("%s", error_string.c_str());
+        }
+
+        // We need to call this service to activate the Action Notification on the kortex_driver node.
+        service_client_activate_notif = n.serviceClient<kortex_driver::OnNotificationActionTopic>("/" + robot_name + "/base/activate_publishing_of_action_topic");
+        kortex_driver::OnNotificationActionTopic service_activate_notif;
+        if(service_client_activate_notif.call(service_activate_notif)) {
+            ROS_INFO("Action notification activated!");
+        } else {
+            std::string error_string = "Action notification publication failed";
+            ROS_ERROR("%s", error_string.c_str());
+            is_successed = false;
+        }        
+    }
+
     robotCombo = new QComboBox;
-    robotCombo->addItems(QStringList() << "Gen3" << "Gen3 lite");
+    robotCombo->addItems(QStringList() << "Gen3/7DoF" << "Gen3/6DoF" << "Gen3 lite");
     connect(robotCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         [=](int index){ on_robotCombo_currentIndexChanged(index); });
 
@@ -165,6 +190,10 @@ MyWidget::Impl::Impl(MyWidget* self)
     connect(playButton, &QToolButton::toggled,
         [&](bool checked){ on_toolButton_toggled(checked); });
 
+    homeButton = new QToolButton;
+    homeButton->setText("Home");
+    homeButton->setEnabled(false);
+    connect(homeButton, &QToolButton::clicked, [&](){ home(); });
     clearButton = new QToolButton;
     clearButton->setText("Clear");
     clearButton->setEnabled(false);
@@ -182,7 +211,8 @@ MyWidget::Impl::Impl(MyWidget* self)
     {
         const QStringList list = {
             "joint 1 [deg/s]", "joint 2 [deg/s]", "joint 3 [deg/s]",
-            "joint 4 [deg/s]", "joint 5 [deg/s]", "joint 6 [deg/s]"
+            "joint 4 [deg/s]", "joint 5 [deg/s]", "joint 6 [deg/s]",
+            "joint 7 [deg/s]"
         };
 
         auto gridLayout = new QGridLayout;
@@ -253,11 +283,11 @@ MyWidget::Impl::Impl(MyWidget* self)
     layout2->addWidget(new QLabel("Robot type"));
     layout2->addWidget(robotCombo);
     layout2->addWidget(playButton);
+    layout2->addStretch();
+    layout2->addWidget(homeButton);
     layout2->addWidget(clearButton);
     layout2->addWidget(stopButton);
     layout2->addWidget(estopButton);
-    layout2->addStretch();
-    // layout2->addWidget(new HomeWidget);
 
     auto layout = new QVBoxLayout;
     layout->addLayout(layout2);
@@ -294,9 +324,84 @@ void MyWidget::Impl::estop()
     emergency_stop_pub.publish(emp_msg);
 }
 
+
+bool MyWidget::Impl::clear2()
+{
+    ros::ServiceClient service_client_clear_faults = n.serviceClient<kortex_driver::Base_ClearFaults>("/" + robot_name + "/base/clear_faults");
+    kortex_driver::Base_ClearFaults service_clear_faults;
+
+    // Clear the faults
+    if(!service_client_clear_faults.call(service_clear_faults)) {
+        std::string error_string = "Failed to clear the faults";
+        ROS_ERROR("%s", error_string.c_str());
+        return false;
+    }
+
+    // Wait a bit
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    return true;
+}
+
+bool MyWidget::Impl::home()
+{
+    ros::ServiceClient service_client_read_action = n.serviceClient<kortex_driver::ReadAction>("/" + robot_name + "/base/read_action");
+    kortex_driver::ReadAction service_read_action;
+    last_action_notification_event = 0;
+
+    // The Home Action is used to home the robot. It cannot be deleted and is always ID #2:
+    service_read_action.request.input.identifier = HOME_ACTION_IDENTIFIER;
+
+    if(!service_client_read_action.call(service_read_action)) {
+        std::string error_string = "Failed to call ReadAction";
+        ROS_ERROR("%s", error_string.c_str());
+        return false;
+    }
+
+    // We can now execute the Action that we read 
+    ros::ServiceClient service_client_execute_action = n.serviceClient<kortex_driver::ExecuteAction>("/" + robot_name + "/base/execute_action");
+    kortex_driver::ExecuteAction service_execute_action;
+
+    service_execute_action.request.input = service_read_action.response.output;
+    
+    if(service_client_execute_action.call(service_execute_action)) {
+        ROS_INFO("The Home position action was sent to the robot.");
+    } else {
+        std::string error_string = "Failed to call ExecuteAction";
+        ROS_ERROR("%s", error_string.c_str());
+        return false;
+    }
+
+    return wait_for_action_end_or_abort();
+}
+
+bool MyWidget::Impl::grip(double value)
+{
+    // Initialize the ServiceClient
+    ros::ServiceClient service_client_send_gripper_command = n.serviceClient<kortex_driver::SendGripperCommand>("/" + robot_name + "/base/send_gripper_command");
+    kortex_driver::SendGripperCommand service_send_gripper_command;
+
+    // Initialize the request
+    kortex_driver::Finger finger;
+    finger.finger_identifier = 0;
+    finger.value = value;
+    service_send_gripper_command.request.input.gripper.finger.push_back(finger);
+    service_send_gripper_command.request.input.mode = kortex_driver::GripperMode::GRIPPER_POSITION;
+
+    if(service_client_send_gripper_command.call(service_send_gripper_command)) {
+        ROS_INFO("The gripper command was sent to the robot.");
+    } else {
+        std::string error_string = "Failed to call SendGripperCommand";
+        ROS_ERROR("%s", error_string.c_str());
+        return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    return true;
+}
+
 void MyWidget::Impl::on_robotCombo_currentIndexChanged(int index)
 {
-    arm = index == 0 ? "gen3" : "gen3_lite";
+    arm = index == 2 ? "gen3_lite" : "gen3";
+    degree_of_freedom = index == 0 ? 7 : 6;
 }
 
 void MyWidget::Impl::on_toolButton_pressed(int arg1, int arg2)
@@ -312,6 +417,7 @@ void MyWidget::Impl::on_toolButton_released(int arg1)
 
 void MyWidget::Impl::on_toolButton_toggled(bool checked)
 {
+    homeButton->setEnabled(checked);
     clearButton->setEnabled(checked);
     stopButton->setEnabled(checked);
     estopButton->setEnabled(checked);
@@ -328,6 +434,9 @@ void MyWidget::Impl::on_toolButton_toggled(bool checked)
             twist_pub = n.advertise<kortex_driver::TwistCommand>("my_" + arm + "/in/cartesian_velocity", 1);
             joy_sub = n.subscribe("joy", 1, &MyWidget::Impl::joyCallback, this);
         }
+
+        // Subscribe to the Action Topic
+        action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
     } else {
         clear_faults_pub.shutdown();
         stop_pub.shutdown();
@@ -340,6 +449,8 @@ void MyWidget::Impl::on_toolButton_toggled(bool checked)
             twist_pub.shutdown();
             joy_sub.shutdown();
         }
+
+        action_sub.shutdown();
     }
 }
 
@@ -347,7 +458,7 @@ void MyWidget::Impl::on_timer_timeout()
 {
     if(currentMode == JointMode) {
         kortex_driver::Base_JointSpeeds joint_msg;
-        joint_msg.joint_speeds.resize(6);
+        joint_msg.joint_speeds.resize(degree_of_freedom);
         for(int i = 0; i < joint_msg.joint_speeds.size(); ++i) {
             joint_msg.joint_speeds[i].joint_identifier = i;
             joint_msg.joint_speeds[i].value = joint_vel[i];
@@ -402,159 +513,6 @@ void MyWidget::Impl::on_timer_timeout()
 void MyWidget::Impl::on_tabWidget_currentChanged(int index)
 {
     currentMode = index == 0 ? JointMode : TwistMode;
-}
-
-HomeWidget::HomeWidget(QWidget* parent)
-    : QWidget(parent)
-    , robot_name("")
-    , is_successed(true)
-{
-    bool is_gripper_present = false;
-
-    // Parameter robot_name
-    if(!ros::param::get("~robot_name", robot_name)) {
-        std::string error_string = "Parameter robot_name was not specified, defaulting to " + robot_name + " as namespace";
-        ROS_WARN("%s", error_string.c_str());
-    } else {
-        std::string error_string = "Using robot_name " + robot_name + " as namespace";
-        ROS_INFO("%s", error_string.c_str());
-    }
-
-    // Parameter is_gripper_present
-    if(!ros::param::get("/" + robot_name + "/is_gripper_present", is_gripper_present)) {
-        std::string error_string = "Parameter /" + robot_name + "/is_gripper_present was not specified, defaulting to " + std::to_string(is_gripper_present);
-        ROS_WARN("%s", error_string.c_str());
-    } else {
-        std::string error_string = "Using is_gripper_present " + std::to_string(is_gripper_present);
-        ROS_INFO("%s", error_string.c_str());
-    }
-
-    // We need to call this service to activate the Action Notification on the kortex_driver node.
-    service_client_activate_notif = n.serviceClient<kortex_driver::OnNotificationActionTopic>("/" + robot_name + "/base/activate_publishing_of_action_topic");
-    kortex_driver::OnNotificationActionTopic service_activate_notif;
-    if(service_client_activate_notif.call(service_activate_notif)) {
-        ROS_INFO("Action notification activated!");
-    } else {
-        std::string error_string = "Action notification publication failed";
-        ROS_ERROR("%s", error_string.c_str());
-        is_successed = false;
-    }
-
-    auto button = new QToolButton;
-    button->setIcon(QIcon::fromTheme("network-wireless"));
-    button->setCheckable(true);
-    connect(button, &QToolButton::toggled,
-        [&](bool checked){ on_toolButton_toggled(checked); });
-
-    clearButton = new QToolButton;
-    clearButton->setText("Clear");
-    clearButton->setEnabled(false);
-    connect(clearButton, &QToolButton::clicked, [&](){ clear(); });
-    homeButton = new QToolButton;
-    homeButton->setText("Home");
-    homeButton->setEnabled(false);
-    connect(homeButton, &QToolButton::clicked, [&](){ home(); });
-
-    if(is_gripper_present) {
-
-    }
-
-    auto layout2 = new QHBoxLayout;
-    layout2->addWidget(button);
-    // layout2->addWidget(clearButton);
-    layout2->addWidget(homeButton);
-    layout2->addStretch();
-
-    auto layout = new QVBoxLayout;
-    layout->addLayout(layout2);
-    layout->addStretch();
-    setLayout(layout);
-}
-
-bool HomeWidget::clear()
-{
-    ros::ServiceClient service_client_clear_faults = n.serviceClient<kortex_driver::Base_ClearFaults>("/" + robot_name + "/base/clear_faults");
-    kortex_driver::Base_ClearFaults service_clear_faults;
-
-    // Clear the faults
-    if(!service_client_clear_faults.call(service_clear_faults)) {
-        std::string error_string = "Failed to clear the faults";
-        ROS_ERROR("%s", error_string.c_str());
-        return false;
-    }
-
-    // Wait a bit
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    return true;
-}
-
-bool HomeWidget::home()
-{
-    ros::ServiceClient service_client_read_action = n.serviceClient<kortex_driver::ReadAction>("/" + robot_name + "/base/read_action");
-    kortex_driver::ReadAction service_read_action;
-    last_action_notification_event = 0;
-
-    // The Home Action is used to home the robot. It cannot be deleted and is always ID #2:
-    service_read_action.request.input.identifier = HOME_ACTION_IDENTIFIER;
-
-    if(!service_client_read_action.call(service_read_action)) {
-        std::string error_string = "Failed to call ReadAction";
-        ROS_ERROR("%s", error_string.c_str());
-        return false;
-    }
-
-    // We can now execute the Action that we read 
-    ros::ServiceClient service_client_execute_action = n.serviceClient<kortex_driver::ExecuteAction>("/" + robot_name + "/base/execute_action");
-    kortex_driver::ExecuteAction service_execute_action;
-
-    service_execute_action.request.input = service_read_action.response.output;
-    
-    if(service_client_execute_action.call(service_execute_action)) {
-        ROS_INFO("The Home position action was sent to the robot.");
-    } else {
-        std::string error_string = "Failed to call ExecuteAction";
-        ROS_ERROR("%s", error_string.c_str());
-        return false;
-    }
-
-    return wait_for_action_end_or_abort();
-}
-
-bool HomeWidget::grip(double value)
-{
-    // Initialize the ServiceClient
-    ros::ServiceClient service_client_send_gripper_command = n.serviceClient<kortex_driver::SendGripperCommand>("/" + robot_name + "/base/send_gripper_command");
-    kortex_driver::SendGripperCommand service_send_gripper_command;
-
-    // Initialize the request
-    kortex_driver::Finger finger;
-    finger.finger_identifier = 0;
-    finger.value = value;
-    service_send_gripper_command.request.input.gripper.finger.push_back(finger);
-    service_send_gripper_command.request.input.mode = kortex_driver::GripperMode::GRIPPER_POSITION;
-
-    if(service_client_send_gripper_command.call(service_send_gripper_command)) {
-        ROS_INFO("The gripper command was sent to the robot.");
-    } else {
-        std::string error_string = "Failed to call SendGripperCommand";
-        ROS_ERROR("%s", error_string.c_str());
-        return false;
-    }
-    std::this_thread::sleep_for(std::chrono::milliseconds(500));
-    return true;
-}
-
-void HomeWidget::on_toolButton_toggled(bool checked)
-{
-    clearButton->setEnabled(checked);
-    homeButton->setEnabled(checked);
-
-    if(checked) {
-        // Subscribe to the Action Topic
-        action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
-    } else {
-        action_sub.shutdown();
-    }
 }
 
 }
