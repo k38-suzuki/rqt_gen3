@@ -27,7 +27,7 @@
 #include <QFormLayout>
 #include <QGridLayout>
 #include <QLabel>
-#include <QTabWidget>
+#include <QStackedWidget>
 #include <QTimer>
 #include <QToolButton>
 
@@ -84,18 +84,20 @@ public:
     bool grip(double value);
 
     void on_robotCombo_currentIndexChanged(int index);
+    void on_mapCombo_currentIndexChanged(int index);
     void on_toolButton_pressed(int arg1, int arg2);
     void on_toolButton_released(int arg1);
     void on_toolButton_toggled(bool checked);
     void on_timer_timeout();
-    void on_tabWidget_currentChanged(int index);
 
     QComboBox* robotCombo;
+    QComboBox* mapCombo;
     QToolButton* playButton;
     QToolButton* homeButton;
     QToolButton* clearButton;
     QToolButton* stopButton;
     QToolButton* estopButton;
+    QStackedWidget* stackedWidget;
 
     QDoubleSpinBox* velSpins[NumJoints];
     QDoubleSpinBox* twistSpins[2];
@@ -182,6 +184,11 @@ MyWidget::Impl::Impl(MyWidget* self)
     robotCombo->addItems(QStringList() << "Gen3/7DoF" << "Gen3/6DoF" << "Gen3 lite");
     connect(robotCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         [=](int index){ on_robotCombo_currentIndexChanged(index); });
+
+    mapCombo = new QComboBox;
+    mapCombo->addItems(QStringList() << "Joint" << "Twist");
+    connect(mapCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        [=](int index){ on_mapCombo_currentIndexChanged(index); });
 
     playButton = new QToolButton;
     playButton->setText("Play");
@@ -271,27 +278,28 @@ MyWidget::Impl::Impl(MyWidget* self)
         twistWidget->setLayout(layout);
     }
 
+    stackedWidget = new QStackedWidget;
+    stackedWidget->addWidget(jointWidget);
+    stackedWidget->addWidget(twistWidget);
+
     timer = new QTimer(self);
     connect(timer, &QTimer::timeout, [&](){ on_timer_timeout(); });
-
-    auto tabWidget = new QTabWidget;
-    tabWidget->addTab(jointWidget, "Joint speed");
-    tabWidget->addTab(twistWidget, "Twist");
-    connect(tabWidget, &QTabWidget::currentChanged, [&](int index){ on_tabWidget_currentChanged(index); });
 
     auto layout2 = new QHBoxLayout;
     layout2->addWidget(new QLabel("Robot type"));
     layout2->addWidget(robotCombo);
+    layout2->addWidget(new QLabel("Control map"));
+    layout2->addWidget(mapCombo);
     layout2->addWidget(playButton);
-    layout2->addStretch();
     layout2->addWidget(homeButton);
     layout2->addWidget(clearButton);
     layout2->addWidget(stopButton);
     layout2->addWidget(estopButton);
+    layout2->addStretch();
 
     auto layout = new QVBoxLayout;
     layout->addLayout(layout2);
-    layout->addWidget(tabWidget);
+    layout->addWidget(stackedWidget);
     layout->addStretch();
     self->setLayout(layout);
 }
@@ -404,6 +412,12 @@ void MyWidget::Impl::on_robotCombo_currentIndexChanged(int index)
     degree_of_freedom = index == 0 ? 7 : 6;
 }
 
+void MyWidget::Impl::on_mapCombo_currentIndexChanged(int index)
+{
+    stackedWidget->setCurrentIndex(index);
+    currentMode = index == 0 ? JointMode : TwistMode;
+}
+
 void MyWidget::Impl::on_toolButton_pressed(int arg1, int arg2)
 {
     double value = arg2 == 0 ? 1.0 : -1.0;
@@ -508,11 +522,6 @@ void MyWidget::Impl::on_timer_timeout()
         }
         twist_pub.publish(twist_msg);
     }
-}
-
-void MyWidget::Impl::on_tabWidget_currentChanged(int index)
-{
-    currentMode = index == 0 ? JointMode : TwistMode;
 }
 
 }
