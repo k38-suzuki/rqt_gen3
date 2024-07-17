@@ -70,7 +70,7 @@ public:
 
     Impl(MyWidget* self);
 
-    enum Mode { JointMode, TwistMode };
+    enum ControlMap { JointMode, TwistMode };
     enum { NumJoints = 7 };
 
     void joyCallback(const sensor_msgs::Joy& msg);
@@ -119,14 +119,14 @@ public:
     std::string robot_name;
 
     int degree_of_freedom;
-    int current_map;
+    int current_mode;
     double joint_vel[NumJoints];
     double twist_linear[3];
     double twist_angular[3];
     bool prev_button_state[2];
     bool is_successed;
 
-    Mode currentMode;
+    ControlMap currentMap;
 };
 
 MyWidget::MyWidget(QWidget* parent)
@@ -138,11 +138,11 @@ MyWidget::MyWidget(QWidget* parent)
 MyWidget::Impl::Impl(MyWidget* self)
     : self(self)
     , degree_of_freedom(NumJoints)
-    , current_map(0)
+    , current_mode(0)
     , arm("gen3")
     , robot_name("my_gen3")
     , is_successed(true)
-    , currentMode(JointMode)
+    , currentMap(JointMode)
 {
     self->setWindowTitle("Gen3/Gen3 lite");
 
@@ -415,7 +415,7 @@ void MyWidget::Impl::on_robotCombo_currentIndexChanged(int index)
 void MyWidget::Impl::on_mapCombo_currentIndexChanged(int index)
 {
     stackedWidget->setCurrentIndex(index);
-    currentMode = index == 0 ? JointMode : TwistMode;
+    currentMap = index == 0 ? JointMode : TwistMode;
 }
 
 void MyWidget::Impl::on_toolButton_pressed(int arg1, int arg2)
@@ -442,7 +442,7 @@ void MyWidget::Impl::on_toolButton_toggled(bool checked)
         emergency_stop_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/emergency_stop", 1);
     
         timer->start(1000.0 / 40.0);
-        if(currentMode == JointMode) {
+        if(currentMap == JointMode) {
             joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("my_" + arm + "/in/joint_velocity", 1);
         } else {
             twist_pub = n.advertise<kortex_driver::TwistCommand>("my_" + arm + "/in/cartesian_velocity", 1);
@@ -457,7 +457,7 @@ void MyWidget::Impl::on_toolButton_toggled(bool checked)
         emergency_stop_pub.shutdown();
 
         timer->stop();
-        if(currentMode == JointMode) {
+        if(currentMap == JointMode) {
             joint_pub.shutdown();
         } else {
             twist_pub.shutdown();
@@ -470,7 +470,7 @@ void MyWidget::Impl::on_toolButton_toggled(bool checked)
 
 void MyWidget::Impl::on_timer_timeout()
 {
-    if(currentMode == JointMode) {
+    if(currentMap == JointMode) {
         kortex_driver::Base_JointSpeeds joint_msg;
         joint_msg.joint_speeds.resize(degree_of_freedom);
         for(int i = 0; i < joint_msg.joint_speeds.size(); ++i) {
@@ -488,8 +488,8 @@ void MyWidget::Impl::on_timer_timeout()
             for(int i = 0; i < 2; ++i) {
                 bool current_state = joy.buttons[button_id[i]];
                 if(current_state && !prev_button_state[i]) {
-                    current_map = current_map == 1 ? 0 : 1;
-                    ROS_INFO("Move to %s-mode.", current_map == 0 ? "translation" : "orientation");
+                    current_mode = current_mode == 1 ? 0 : 1;
+                    ROS_INFO("Move to %s-mode.", current_mode == 0 ? "translation" : "orientation");
                 }
                 prev_button_state[i] = current_state;
             }
@@ -505,14 +505,14 @@ void MyWidget::Impl::on_timer_timeout()
         }
 
         kortex_driver::TwistCommand twist_msg;
-        if(current_map == 0) {
+        if(current_mode == 0) {
             twist_msg.twist.linear_x = twist_linear[0];
             twist_msg.twist.linear_y = twist_linear[1];
             twist_msg.twist.linear_z = twist_linear[2];
             twist_msg.twist.angular_x = 0.0;
             twist_msg.twist.angular_y = 0.0;
             twist_msg.twist.angular_z = 0.0;
-        } else if(current_map == 1) {
+        } else if(current_mode == 1) {
             twist_msg.twist.linear_x = 0.0;
             twist_msg.twist.linear_y = 0.0;
             twist_msg.twist.linear_z = 0.0;
