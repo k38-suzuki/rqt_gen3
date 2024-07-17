@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>rqt_gen3_lite</name>
+  <name>rqt_gen3</name>
   <version>0.0.0</version>
-  <description>The rqt_gen3_lite package</description>
+  <description>The rqt_gen3 package</description>
   <maintainer email="suzuki.kenta38@jaea.go.jp">k38-suzuki</maintainer>
   <license>TODO</license>
 

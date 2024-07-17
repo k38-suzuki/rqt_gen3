@@ -1,7 +1,7 @@
-<library path="lib/librqt_gen3_lite">
-  <class name="rqt_gen3_lite/MyPlugin" type="rqt_gen3_lite::MyPlugin" base_class_type="rqt_gui_cpp::Plugin">
+<library path="lib/librqt_gen3">
+  <class name="rqt_gen3/MyPlugin" type="rqt_gen3::MyPlugin" base_class_type="rqt_gui_cpp::Plugin">
     <description>
-      A C++ GUI plugin for publishing Gen3 lite topics.
+      A C++ GUI plugin for publishing Gen3/Gen3 lite topics.
     </description>
     <qtgui>
       <group>
@@ -9,9 +9,9 @@
         <icon type="theme">folder</icon>
         <statustip>Plugins related to robot tools.</statustip>
       </group>
-      <label>Gen3 lite (experimental)</label>
+      <label>Gen3/Gen3 lite (experimental)</label>
       <icon type="theme">input-gaming</icon>
-      <statustip>A C++ GUI plugin for maneuvering Gen3 lite.</statustip>
+      <statustip>A C++ GUI plugin for maneuvering Gen3/Gen3 lite.</statustip>
     </qtgui>
   </class>
 </library>

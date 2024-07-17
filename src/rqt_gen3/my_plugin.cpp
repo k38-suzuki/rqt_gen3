@@ -2,14 +2,14 @@
     @author Kenta Suzuki
 */
 
-#include "rqt_gen3_lite/my_plugin.h"
+#include "rqt_gen3/my_plugin.h"
 
 #include <pluginlib/class_list_macros.h>
 #include <QStringList>
 
-#include "rqt_gen3_lite/my_widget.h"
+#include "rqt_gen3/my_widget.h"
 
-namespace rqt_gen3_lite {
+namespace rqt_gen3 {
 
 MyPlugin::MyPlugin()
     : rqt_gui_cpp::Plugin()
@@ -66,4 +66,4 @@ void MyPlugin::triggerConfiguration()
 
 } // namespace
 
-PLUGINLIB_EXPORT_CLASS(rqt_gen3_lite::MyPlugin, rqt_gui_cpp::Plugin)
+PLUGINLIB_EXPORT_CLASS(rqt_gen3::MyPlugin, rqt_gui_cpp::Plugin)

@@ -2,12 +2,12 @@
     @author Kenta Suzuki
 */
 
-#ifndef rqt_gen3_lite__my_widget_H
-#define rqt_gen3_lite__my_widget_H
+#ifndef rqt_gen3__my_widget_H
+#define rqt_gen3__my_widget_H
 
 #include <QWidget>
 
-namespace rqt_gen3_lite {
+namespace rqt_gen3 {
 
 class MyWidget : public QWidget
 {
@@ -24,4 +24,4 @@ private:
 
 }
 
-#endif // rqt_gen3_lite__my_widget_H
+#endif // rqt_gen3__my_widget_H

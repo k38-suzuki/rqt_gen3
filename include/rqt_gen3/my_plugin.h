@@ -2,12 +2,12 @@
     @author Kenta Suzuki
 */
 
-#ifndef rqt_gen3_lite__my_plugin_H
-#define rqt_gen3_lite__my_plugin_H
+#ifndef rqt_gen3__my_plugin_H
+#define rqt_gen3__my_plugin_H
 
 #include <rqt_gui_cpp/plugin.h>
 
-namespace rqt_gen3_lite {
+namespace rqt_gen3 {
 
 class MyPlugin : public rqt_gui_cpp::Plugin
 {
@@ -26,4 +26,4 @@ public:
 
 } // namespace
 
-#endif // rqt_gen3_lite__my_plugin_H
+#endif // rqt_gen3__my_plugin_H
