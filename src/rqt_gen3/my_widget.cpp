@@ -70,7 +70,7 @@ public:
 
     Impl(MyWidget* self);
 
-    enum ControlMap { JointMode, TwistMode };
+    enum ControlMap { Joint, Twist };
     enum { NumJoints = 7 };
 
     void joyCallback(const sensor_msgs::Joy& msg);
@@ -85,14 +85,14 @@ public:
 
     void on_robotCombo_currentIndexChanged(int index);
     void on_mapCombo_currentIndexChanged(int index);
+    void on_publishButton_toggled(bool checked);
     void on_toolButton_pressed(int arg1, int arg2);
     void on_toolButton_released(int arg1);
-    void on_toolButton_toggled(bool checked);
     void on_timer_timeout();
 
     QComboBox* robotCombo;
     QComboBox* mapCombo;
-    QToolButton* playButton;
+    QToolButton* publishButton;
     QToolButton* homeButton;
     QToolButton* clearButton;
     QToolButton* stopButton;
@@ -142,7 +142,7 @@ MyWidget::Impl::Impl(MyWidget* self)
     , arm("gen3")
     , robot_name("my_gen3")
     , is_successed(true)
-    , currentMap(JointMode)
+    , currentMap(Joint)
 {
     self->setWindowTitle("Gen3/Gen3 lite");
 
@@ -190,12 +190,11 @@ MyWidget::Impl::Impl(MyWidget* self)
     connect(mapCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
         [=](int index){ on_mapCombo_currentIndexChanged(index); });
 
-    playButton = new QToolButton;
-    playButton->setText("Play");
-    // playButton->setIcon(QIcon::fromTheme("network-wireless"));
-    playButton->setCheckable(true);
-    connect(playButton, &QToolButton::toggled,
-        [&](bool checked){ on_toolButton_toggled(checked); });
+    publishButton = new QToolButton;
+    publishButton->setText("Publish");
+    publishButton->setCheckable(true);
+    connect(publishButton, &QToolButton::toggled,
+        [&](bool checked){ on_publishButton_toggled(checked); });
 
     homeButton = new QToolButton;
     homeButton->setText("Home");
@@ -290,7 +289,7 @@ MyWidget::Impl::Impl(MyWidget* self)
     layout2->addWidget(robotCombo);
     layout2->addWidget(new QLabel("Control map"));
     layout2->addWidget(mapCombo);
-    layout2->addWidget(playButton);
+    layout2->addWidget(publishButton);
     layout2->addWidget(homeButton);
     layout2->addWidget(clearButton);
     layout2->addWidget(stopButton);
@@ -415,7 +414,48 @@ void MyWidget::Impl::on_robotCombo_currentIndexChanged(int index)
 void MyWidget::Impl::on_mapCombo_currentIndexChanged(int index)
 {
     stackedWidget->setCurrentIndex(index);
-    currentMap = index == 0 ? JointMode : TwistMode;
+    currentMap = index == 0 ? Joint : Twist;
+}
+
+void MyWidget::Impl::on_publishButton_toggled(bool checked)
+{
+    homeButton->setEnabled(checked);
+    clearButton->setEnabled(checked);
+    stopButton->setEnabled(checked);
+    estopButton->setEnabled(checked);
+
+    if(checked) {
+        clear_faults_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/clear_faults", 1);
+        stop_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/stop", 1);
+        emergency_stop_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/emergency_stop", 1);
+    
+        if(currentMap == Joint) {
+            joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("my_" + arm + "/in/joint_velocity", 1);
+        } else if(currentMap == Twist) {
+            twist_pub = n.advertise<kortex_driver::TwistCommand>("my_" + arm + "/in/cartesian_velocity", 1);
+            joy_sub = n.subscribe("joy", 1, &MyWidget::Impl::joyCallback, this);
+        }
+
+        // Subscribe to the Action Topic
+        action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
+
+        timer->start(1000.0 / 40.0);
+    } else {
+        timer->stop();
+
+        clear_faults_pub.shutdown();
+        stop_pub.shutdown();
+        emergency_stop_pub.shutdown();
+
+        if(currentMap == Joint) {
+            joint_pub.shutdown();
+        } else if(currentMap == Twist) {
+            twist_pub.shutdown();
+            joy_sub.shutdown();
+        }
+
+        action_sub.shutdown();
+    }
 }
 
 void MyWidget::Impl::on_toolButton_pressed(int arg1, int arg2)
@@ -429,48 +469,9 @@ void MyWidget::Impl::on_toolButton_released(int arg1)
     joint_vel[arg1] = 0.0;
 }
 
-void MyWidget::Impl::on_toolButton_toggled(bool checked)
-{
-    homeButton->setEnabled(checked);
-    clearButton->setEnabled(checked);
-    stopButton->setEnabled(checked);
-    estopButton->setEnabled(checked);
-
-    if(checked) {
-        clear_faults_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/clear_faults", 1);
-        stop_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/stop", 1);
-        emergency_stop_pub = n.advertise<std_msgs::Empty>("my_" + arm + "/in/emergency_stop", 1);
-    
-        timer->start(1000.0 / 40.0);
-        if(currentMap == JointMode) {
-            joint_pub = n.advertise<kortex_driver::Base_JointSpeeds>("my_" + arm + "/in/joint_velocity", 1);
-        } else {
-            twist_pub = n.advertise<kortex_driver::TwistCommand>("my_" + arm + "/in/cartesian_velocity", 1);
-            joy_sub = n.subscribe("joy", 1, &MyWidget::Impl::joyCallback, this);
-        }
-
-        // Subscribe to the Action Topic
-        action_sub = n.subscribe("/" + robot_name  + "/action_topic", 1000, ::notification_callback);
-    } else {
-        clear_faults_pub.shutdown();
-        stop_pub.shutdown();
-        emergency_stop_pub.shutdown();
-
-        timer->stop();
-        if(currentMap == JointMode) {
-            joint_pub.shutdown();
-        } else {
-            twist_pub.shutdown();
-            joy_sub.shutdown();
-        }
-
-        action_sub.shutdown();
-    }
-}
-
 void MyWidget::Impl::on_timer_timeout()
 {
-    if(currentMap == JointMode) {
+    if(currentMap == Joint) {
         kortex_driver::Base_JointSpeeds joint_msg;
         joint_msg.joint_speeds.resize(degree_of_freedom);
         for(int i = 0; i < joint_msg.joint_speeds.size(); ++i) {
